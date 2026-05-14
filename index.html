@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finger Tracking Camera Game</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #101820;
+      color: white;
+      overflow: hidden;
+    }
+
+    .game-wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #203040 0%, #101820 70%);
+    }
+
+    video {
+      display: none;
+    }
+
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      transform: scaleX(-1);
+    }
+
+    .hud {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      z-index: 10;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .pill {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 10px 14px;
+      border-radius: 999px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      font-weight: 700;
+    }
+
+    .instructions {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(720px, calc(100vw - 32px));
+      padding: 14px 18px;
+      border-radius: 18px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      text-align: center;
+      line-height: 1.5;
+      backdrop-filter: blur(8px);
+      z-index: 10;
+    }
+
+    .start-screen,
+    .game-over-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(16, 24, 32, 0.9);
+      padding: 24px;
+    }
+
+    .card {
+      width: min(560px, 100%);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: clamp(32px, 6vw, 56px);
+      line-height: 1;
+    }
+
+    p {
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 17px;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 22px;
+      margin-top: 14px;
+      background: #00d1ff;
+      color: #081018;
+      font-weight: 800;
+      font-size: 16px;
+      box-shadow: 0 12px 30px rgba(0, 209, 255, 0.25);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .warning {
+      margin-top: 12px;
+      color: #ffd36a;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="hud">
+      <div class="pill">Score: <span id="score">0</span></div>
+      <div class="pill">Time: <span id="time">45</span>s</div>
+      <div class="pill">Best: <span id="best">0</span></div>
+    </div>
+
+    <div class="instructions">
+      Move your index finger in front of your camera. Touch the glowing targets to score. Pinch your thumb and index finger to create a small burst.
+    </div>
+
+    <div id="startScreen" class="start-screen">
+      <div class="card">
+        <h1>Finger Rush</h1>
+        <p>Use your camera and move your index finger to collect targets. Your hand becomes the controller.</p>
+        <button id="startButton">Start Game</button>
+        <div class="warning">Allow camera permission when your browser asks.</div>
+      </div>
+    </div>
+
+    <div id="gameOverScreen" class="game-over-screen hidden">
+      <div class="card">
+        <h1>Game Over</h1>
+        <p>Your score: <strong id="finalScore">0</strong></p>
+        <button id="restartButton">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MediaPipe hand tracking libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+  <script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const timeEl = document.getElementById('time');
+    const bestEl = document.getElementById('best');
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const startButton = document.getElementById('startButton');
+    const restartButton = document.getElementById('restartButton');
+    const finalScoreEl = document.getElementById('finalScore');
+
+    let score = 0;
+    let best = Number(localStorage.getItem('fingerRushBest') || 0);
+    let timeLeft = 45;
+    let gameRunning = false;
+    let gameTimer = null;
+    let camera = null;
+
+    let finger = {
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+      visible: false,
+      pinching: false,
+      burst: 0
+    };
+
+    let targets = [];
+    let particles = [];
+
+    bestEl.textContent = best;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function randomBetween(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function spawnTarget() {
+      const radius = randomBetween(26, 44);
+      targets.push({
+        x: randomBetween(radius + 20, canvas.width - radius - 20),
+        y: randomBetween(radius + 90, canvas.height - radius - 90),
+        radius,
+        pulse: Math.random() * Math.PI * 2,
+        value: Math.round(50 / radius)
+      });
+    }
+
+    function resetGame() {
+      score = 0;
+      timeLeft = 45;
+      targets = [];
+      particles = [];
+      scoreEl.textContent = score;
+      timeEl.textContent = timeLeft;
+      for (let i = 0; i < 6; i++) spawnTarget();
+    }
+
+    function startGame() {
+      resetGame();
+      gameRunning = true;
+      startScreen.classList.add('hidden');
+      gameOverScreen.classList.add('hidden');
+
+      clearInterval(gameTimer);
+      gameTimer = setInterval(() => {
+        timeLeft -= 1;
+        timeEl.textContent = timeLeft;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    }
+
+    function endGame() {
+      gameRunning = false;
+      clearInterval(gameTimer);
+      finalScoreEl.textContent = score;
+      if (score > best) {
+        best = score;
+        localStorage.setItem('fingerRushBest', String(best));
+        bestEl.textContent = best;
+      }
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    function createParticles(x, y, count = 18) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x,
+          y,
+          vx: randomBetween(-5, 5),
+          vy: randomBetween(-5, 5),
+          life: randomBetween(18, 34),
+          radius: randomBetween(2, 6)
+        });
+      }
+    }
+
+    function distance(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function updateGame() {
+      if (!gameRunning || !finger.visible) return;
+
+      for (let i = targets.length - 1; i >= 0; i--) {
+        const target = targets[i];
+        const hitDistance = target.radius + 20 + finger.burst;
+        if (distance(finger, target) < hitDistance) {
+          score += target.value;
+          scoreEl.textContent = score;
+          createParticles(target.x, target.y, 24);
+          targets.splice(i, 1);
+          spawnTarget();
+        }
+      }
+
+      finger.burst *= 0.9;
+    }
+
+    function drawBackground() {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        50,
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.width
+      );
+      gradient.addColorStop(0, '#21384a');
+      gradient.addColorStop(1, '#101820');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.globalAlpha = 0.08;
+      for (let x = 0; x < canvas.width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawTargets() {
+      for (const target of targets) {
+        target.pulse += 0.08;
+        const pulseSize = Math.sin(target.pulse) * 5;
+
+        ctx.save();
+        ctx.shadowColor = '#00d1ff';
+        ctx.shadowBlur = 28;
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, target.radius + pulseSize, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 209, 255, 0.85)';
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, target.radius * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawFinger() {
+      if (!finger.visible) {
+        ctx.save();
+        ctx.font = 'bold 30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillText('Show your hand to the camera', canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+        return;
+      }
+
+      ctx.save();
+      ctx.shadowColor = '#ffdd57';
+      ctx.shadowBlur = 24;
+      ctx.beginPath();
+      ctx.arc(finger.x, finger.y, 22 + finger.burst, 0, Math.PI * 2);
+      ctx.fillStyle = finger.pinching ? 'rgba(255, 119, 119, 0.9)' : 'rgba(255, 221, 87, 0.95)';
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(finger.x, finger.y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+        p.life -= 1;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.life / 34, 0);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.restore();
+
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
+    function gameLoop() {
+      drawBackground();
+      updateGame();
+      drawTargets();
+      drawParticles();
+      drawFinger();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function onHandResults(results) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        finger.visible = false;
+        return;
+      }
+
+      const landmarks = results.multiHandLandmarks[0];
+      const indexTip = landmarks[8];
+      const thumbTip = landmarks[4];
+
+      // Mirror x so it feels like looking in a mirror.
+      finger.x = (1 - indexTip.x) * canvas.width;
+      finger.y = indexTip.y * canvas.height;
+      finger.visible = true;
+
+      const pinchDistance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+      const isPinchingNow = pinchDistance < 0.055;
+
+      if (isPinchingNow && !finger.pinching) {
+        finger.burst = 48;
+        createParticles(finger.x, finger.y, 12);
+      }
+
+      finger.pinching = isPinchingNow;
+    }
+
+    async function setupHandTracking() {
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.65
+      });
+
+      hands.onResults(onHandResults);
+
+      camera = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 1280,
+        height: 720
+      });
+
+      await camera.start();
+    }
+
+    startButton.addEventListener('click', async () => {
+      startButton.disabled = true;
+      startButton.textContent = 'Starting Camera...';
+      try {
+        if (!camera) await setupHandTracking();
+        startGame();
+      } catch (error) {
+        alert('Camera could not start. Make sure camera permission is allowed and run this file from localhost or GitHub Pages.');
+        console.error(error);
+        startButton.disabled = false;
+        startButton.textContent = 'Start Game';
+      }
+    });
+
+    restartButton.addEventListener('click', startGame);
+
+    gameLoop();
+  </script>
+</body>
+</html>
