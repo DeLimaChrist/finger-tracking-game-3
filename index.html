@@ -3,33 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Finger Tracking Camera Game</title>
+  <title>Finger Rush — Hand Tracking Game</title>
   <style>
-    * {
-      box-sizing: border-box;
+    * { box-sizing: border-box; }
+
+    :root {
+      --bg1: #090b1f;
+      --bg2: #111a3a;
+      --cyan: #00e5ff;
+      --pink: #ff4ecd;
+      --gold: #ffd166;
+      --danger: #ff3b5c;
+      --glass: rgba(255, 255, 255, 0.09);
+      --glass-border: rgba(255, 255, 255, 0.18);
     }
 
     body {
       margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #101820;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: var(--bg1);
       color: white;
       overflow: hidden;
+      user-select: none;
     }
 
     .game-wrapper {
       position: relative;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: radial-gradient(circle at center, #203040 0%, #101820 70%);
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(255, 78, 205, 0.24), transparent 28%),
+        radial-gradient(circle at 80% 25%, rgba(0, 229, 255, 0.22), transparent 30%),
+        radial-gradient(circle at 50% 90%, rgba(255, 209, 102, 0.14), transparent 28%),
+        linear-gradient(135deg, var(--bg1), var(--bg2));
     }
 
-    video {
-      display: none;
-    }
+    video { display: none; }
 
     canvas {
       width: 100vw;
@@ -42,21 +52,36 @@
       position: absolute;
       top: 18px;
       left: 18px;
+      right: 18px;
       z-index: 10;
       display: flex;
+      justify-content: space-between;
       gap: 12px;
+      pointer-events: none;
+    }
+
+    .hud-left, .hud-right {
+      display: flex;
+      gap: 10px;
       flex-wrap: wrap;
       align-items: center;
     }
 
     .pill {
-      background: rgba(0, 0, 0, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid var(--glass-border);
       padding: 10px 14px;
       border-radius: 999px;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-      font-weight: 700;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+
+    .pill.hot {
+      color: var(--gold);
+      border-color: rgba(255, 209, 102, 0.5);
+      box-shadow: 0 0 26px rgba(255, 209, 102, 0.12);
     }
 
     .instructions {
@@ -64,75 +89,127 @@
       bottom: 18px;
       left: 50%;
       transform: translateX(-50%);
-      width: min(720px, calc(100vw - 32px));
+      width: min(760px, calc(100vw - 32px));
       padding: 14px 18px;
-      border-radius: 18px;
-      background: rgba(0, 0, 0, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 22px;
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid var(--glass-border);
       text-align: center;
-      line-height: 1.5;
-      backdrop-filter: blur(8px);
+      line-height: 1.45;
+      backdrop-filter: blur(14px);
       z-index: 10;
+      color: rgba(255,255,255,0.86);
     }
 
-    .start-screen,
-    .game-over-screen {
+    .start-screen, .game-over-screen {
       position: absolute;
       inset: 0;
       z-index: 20;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(16, 24, 32, 0.9);
+      background: rgba(5, 7, 18, 0.78);
+      backdrop-filter: blur(16px);
       padding: 24px;
     }
 
     .card {
-      width: min(560px, 100%);
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 28px;
-      padding: 28px;
-      box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+      width: min(620px, 100%);
+      background: linear-gradient(145deg, rgba(255,255,255,0.13), rgba(255,255,255,0.05));
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 34px;
+      padding: 30px;
+      box-shadow: 0 30px 100px rgba(0,0,0,0.5);
       text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(90deg, transparent, rgba(0,229,255,0.25), rgba(255,78,205,0.25), transparent);
+      opacity: 0.8;
+      pointer-events: none;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     }
 
     h1 {
-      margin-top: 0;
-      font-size: clamp(32px, 6vw, 56px);
-      line-height: 1;
+      margin: 0 0 10px;
+      font-size: clamp(42px, 8vw, 76px);
+      line-height: 0.9;
+      letter-spacing: -2px;
+      text-shadow: 0 0 28px rgba(0, 229, 255, 0.25);
     }
 
-    p {
+    .subtitle {
       color: rgba(255, 255, 255, 0.82);
-      font-size: 17px;
+      font-size: 18px;
+      margin: 12px auto 20px;
+      max-width: 480px;
+    }
+
+    .rules {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 20px 0 8px;
+    }
+
+    .rule {
+      padding: 14px 10px;
+      border-radius: 20px;
+      background: rgba(0,0,0,0.26);
+      border: 1px solid rgba(255,255,255,0.13);
+      font-size: 14px;
+      color: rgba(255,255,255,0.86);
     }
 
     button {
       cursor: pointer;
       border: 0;
       border-radius: 999px;
-      padding: 14px 22px;
-      margin-top: 14px;
-      background: #00d1ff;
-      color: #081018;
-      font-weight: 800;
-      font-size: 16px;
-      box-shadow: 0 12px 30px rgba(0, 209, 255, 0.25);
+      padding: 15px 26px;
+      margin-top: 18px;
+      background: linear-gradient(135deg, var(--cyan), var(--pink));
+      color: white;
+      font-weight: 900;
+      font-size: 17px;
+      box-shadow: 0 16px 36px rgba(0, 229, 255, 0.2);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
     button:hover {
-      transform: translateY(-1px);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 20px 44px rgba(255, 78, 205, 0.22);
     }
 
-    .hidden {
-      display: none;
-    }
+    .hidden { display: none; }
 
     .warning {
       margin-top: 12px;
-      color: #ffd36a;
+      color: var(--gold);
       font-size: 14px;
+    }
+
+    @media (max-width: 640px) {
+      .hud {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+      .pill {
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .instructions {
+        bottom: 10px;
+        font-size: 13px;
+      }
+      .rules {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -142,19 +219,30 @@
     <canvas id="gameCanvas"></canvas>
 
     <div class="hud">
-      <div class="pill">Score: <span id="score">0</span></div>
-      <div class="pill">Time: <span id="time">45</span>s</div>
-      <div class="pill">Best: <span id="best">0</span></div>
+      <div class="hud-left">
+        <div class="pill">Score: <span id="score">0</span></div>
+        <div class="pill hot">Combo: x<span id="combo">1</span></div>
+        <div class="pill">Level: <span id="level">1</span></div>
+      </div>
+      <div class="hud-right">
+        <div class="pill">Time: <span id="time">45</span>s</div>
+        <div class="pill">Best: <span id="best">0</span></div>
+      </div>
     </div>
 
     <div class="instructions">
-      Move your index finger in front of your camera. Touch the glowing targets to score. Pinch your thumb and index finger to create a small burst.
+      Index finger = controller. Collect blue/gold orbs. Avoid red bombs. Pinch thumb + index finger for a shockwave.
     </div>
 
     <div id="startScreen" class="start-screen">
       <div class="card">
         <h1>Finger Rush</h1>
-        <p>Use your camera and move your index finger to collect targets. Your hand becomes the controller.</p>
+        <p class="subtitle">A camera-powered arcade game. Move your finger, build combos, dodge bombs, and beat your best score.</p>
+        <div class="rules">
+          <div class="rule">✨ Blue orbs give points</div>
+          <div class="rule">💰 Gold orbs give bonus time</div>
+          <div class="rule">💣 Red bombs break combo</div>
+        </div>
         <button id="startButton">Start Game</button>
         <div class="warning">Allow camera permission when your browser asks.</div>
       </div>
@@ -163,13 +251,12 @@
     <div id="gameOverScreen" class="game-over-screen hidden">
       <div class="card">
         <h1>Game Over</h1>
-        <p>Your score: <strong id="finalScore">0</strong></p>
+        <p class="subtitle">Your score: <strong id="finalScore">0</strong><br>Highest combo: <strong id="finalCombo">x1</strong></p>
         <button id="restartButton">Play Again</button>
       </div>
     </div>
   </div>
 
-  <!-- MediaPipe hand tracking libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -180,6 +267,8 @@
     const ctx = canvas.getContext('2d');
 
     const scoreEl = document.getElementById('score');
+    const comboEl = document.getElementById('combo');
+    const levelEl = document.getElementById('level');
     const timeEl = document.getElementById('time');
     const bestEl = document.getElementById('best');
     const startScreen = document.getElementById('startScreen');
@@ -187,58 +276,96 @@
     const startButton = document.getElementById('startButton');
     const restartButton = document.getElementById('restartButton');
     const finalScoreEl = document.getElementById('finalScore');
+    const finalComboEl = document.getElementById('finalCombo');
 
     let score = 0;
+    let combo = 1;
+    let maxCombo = 1;
+    let level = 1;
     let best = Number(localStorage.getItem('fingerRushBest') || 0);
     let timeLeft = 45;
     let gameRunning = false;
     let gameTimer = null;
     let camera = null;
+    let screenShake = 0;
+    let flash = 0;
 
     let finger = {
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
       visible: false,
       pinching: false,
-      burst: 0
+      burst: 0,
+      trail: []
     };
 
     let targets = [];
     let particles = [];
+    let floatingTexts = [];
+    let stars = [];
 
     bestEl.textContent = best;
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      stars = Array.from({ length: Math.floor((canvas.width * canvas.height) / 15000) }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 0.5,
+        speed: Math.random() * 0.4 + 0.15
+      }));
     }
 
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    function randomBetween(min, max) {
-      return Math.random() * (max - min) + min;
+    function randomBetween(min, max) { return Math.random() * (max - min) + min; }
+
+    function chooseTargetType() {
+      const roll = Math.random();
+      if (roll < 0.14) return 'bomb';
+      if (roll < 0.26) return 'gold';
+      return 'orb';
     }
 
     function spawnTarget() {
-      const radius = randomBetween(26, 44);
+      const type = chooseTargetType();
+      const radius = type === 'bomb' ? randomBetween(24, 34) : randomBetween(25, 42);
+      const speed = randomBetween(0.5, 1.5) + level * 0.12;
       targets.push({
+        type,
         x: randomBetween(radius + 20, canvas.width - radius - 20),
-        y: randomBetween(radius + 90, canvas.height - radius - 90),
+        y: randomBetween(radius + 100, canvas.height - radius - 100),
+        vx: randomBetween(-speed, speed),
+        vy: randomBetween(-speed, speed),
         radius,
         pulse: Math.random() * Math.PI * 2,
-        value: Math.round(50 / radius)
+        value: type === 'gold' ? 8 : 5
       });
     }
 
     function resetGame() {
       score = 0;
+      combo = 1;
+      maxCombo = 1;
+      level = 1;
       timeLeft = 45;
       targets = [];
       particles = [];
+      floatingTexts = [];
+      screenShake = 0;
+      flash = 0;
+      updateHud();
+      for (let i = 0; i < 7; i++) spawnTarget();
+    }
+
+    function updateHud() {
       scoreEl.textContent = score;
+      comboEl.textContent = combo;
+      levelEl.textContent = level;
       timeEl.textContent = timeLeft;
-      for (let i = 0; i < 6; i++) spawnTarget();
+      bestEl.textContent = best;
     }
 
     function startGame() {
@@ -246,11 +373,10 @@
       gameRunning = true;
       startScreen.classList.add('hidden');
       gameOverScreen.classList.add('hidden');
-
       clearInterval(gameTimer);
       gameTimer = setInterval(() => {
         timeLeft -= 1;
-        timeEl.textContent = timeLeft;
+        updateHud();
         if (timeLeft <= 0) endGame();
       }, 1000);
     }
@@ -259,6 +385,7 @@
       gameRunning = false;
       clearInterval(gameTimer);
       finalScoreEl.textContent = score;
+      finalComboEl.textContent = `x${maxCombo}`;
       if (score > best) {
         best = score;
         localStorage.setItem('fingerRushBest', String(best));
@@ -267,17 +394,21 @@
       gameOverScreen.classList.remove('hidden');
     }
 
-    function createParticles(x, y, count = 18) {
+    function createParticles(x, y, count = 18, type = 'orb') {
       for (let i = 0; i < count; i++) {
         particles.push({
-          x,
-          y,
+          x, y,
           vx: randomBetween(-5, 5),
           vy: randomBetween(-5, 5),
-          life: randomBetween(18, 34),
-          radius: randomBetween(2, 6)
+          life: randomBetween(20, 42),
+          radius: randomBetween(2, 7),
+          type
         });
       }
+    }
+
+    function addFloatingText(text, x, y, type = 'orb') {
+      floatingTexts.push({ text, x, y, life: 48, type });
     }
 
     function distance(a, b) {
@@ -286,79 +417,165 @@
       return Math.sqrt(dx * dx + dy * dy);
     }
 
+    function levelUpCheck() {
+      const newLevel = Math.floor(score / 80) + 1;
+      if (newLevel > level) {
+        level = newLevel;
+        timeLeft += 5;
+        flash = 1;
+        addFloatingText(`LEVEL ${level}! +5s`, canvas.width / 2, canvas.height / 2, 'gold');
+        while (targets.length < Math.min(7 + level, 14)) spawnTarget();
+      }
+    }
+
+    function handleHit(target, index) {
+      if (target.type === 'bomb') {
+        combo = 1;
+        timeLeft = Math.max(1, timeLeft - 3);
+        screenShake = 16;
+        flash = 0.55;
+        createParticles(target.x, target.y, 34, 'bomb');
+        addFloatingText('-3s Combo Lost!', target.x, target.y, 'bomb');
+      } else {
+        const points = target.value * combo;
+        score += points;
+        combo = Math.min(combo + 1, 12);
+        maxCombo = Math.max(maxCombo, combo);
+        if (target.type === 'gold') {
+          timeLeft += 3;
+          createParticles(target.x, target.y, 34, 'gold');
+          addFloatingText(`+${points} +3s`, target.x, target.y, 'gold');
+        } else {
+          createParticles(target.x, target.y, 24, 'orb');
+          addFloatingText(`+${points}`, target.x, target.y, 'orb');
+        }
+      }
+      targets.splice(index, 1);
+      spawnTarget();
+      levelUpCheck();
+      updateHud();
+    }
+
+    function updateTargets() {
+      for (const target of targets) {
+        target.x += target.vx;
+        target.y += target.vy;
+        if (target.x < target.radius || target.x > canvas.width - target.radius) target.vx *= -1;
+        if (target.y < target.radius + 80 || target.y > canvas.height - target.radius - 80) target.vy *= -1;
+      }
+    }
+
     function updateGame() {
+      updateTargets();
       if (!gameRunning || !finger.visible) return;
 
       for (let i = targets.length - 1; i >= 0; i--) {
         const target = targets[i];
         const hitDistance = target.radius + 20 + finger.burst;
         if (distance(finger, target) < hitDistance) {
-          score += target.value;
-          scoreEl.textContent = score;
-          createParticles(target.x, target.y, 24);
-          targets.splice(i, 1);
-          spawnTarget();
+          handleHit(target, i);
         }
       }
 
-      finger.burst *= 0.9;
+      finger.burst *= 0.88;
+      screenShake *= 0.86;
+      flash *= 0.92;
     }
 
     function drawBackground() {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const shakeX = randomBetween(-screenShake, screenShake);
+      const shakeY = randomBetween(-screenShake, screenShake);
+      ctx.translate(shakeX, shakeY);
 
-      const gradient = ctx.createRadialGradient(
-        canvas.width / 2,
-        canvas.height / 2,
-        50,
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width
-      );
-      gradient.addColorStop(0, '#21384a');
-      gradient.addColorStop(1, '#101820');
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#090b1f');
+      gradient.addColorStop(0.45, '#111a3a');
+      gradient.addColorStop(1, '#050816');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(-50, -50, canvas.width + 100, canvas.height + 100);
 
-      ctx.globalAlpha = 0.08;
-      for (let x = 0; x < canvas.width; x += 50) {
+      for (const star of stars) {
+        star.y += star.speed;
+        if (star.y > canvas.height) {
+          star.y = 0;
+          star.x = Math.random() * canvas.width;
+        }
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 0.06;
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 55) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
-        ctx.strokeStyle = 'white';
+        ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       }
-      for (let y = 0; y < canvas.height; y += 50) {
+      for (let y = 0; y < canvas.height; y += 55) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
-        ctx.strokeStyle = 'white';
+        ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       }
       ctx.restore();
+    }
+
+    function colorFor(type) {
+      if (type === 'bomb') return '#ff3b5c';
+      if (type === 'gold') return '#ffd166';
+      return '#00e5ff';
     }
 
     function drawTargets() {
       for (const target of targets) {
         target.pulse += 0.08;
         const pulseSize = Math.sin(target.pulse) * 5;
+        const color = colorFor(target.type);
 
         ctx.save();
-        ctx.shadowColor = '#00d1ff';
-        ctx.shadowBlur = 28;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = target.type === 'bomb' ? 18 : 32;
         ctx.beginPath();
         ctx.arc(target.x, target.y, target.radius + pulseSize, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0, 209, 255, 0.85)';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = target.type === 'bomb' ? 0.88 : 0.82;
         ctx.fill();
 
+        ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.arc(target.x, target.y, target.radius * 0.55, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.arc(target.x, target.y, target.radius * 0.52, 0, Math.PI * 2);
+        ctx.fillStyle = target.type === 'bomb' ? '#22000a' : 'rgba(255, 255, 255, 0.86)';
         ctx.fill();
+
+        ctx.font = `bold ${target.radius}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = target.type === 'bomb' ? '#fff' : '#111827';
+        ctx.fillText(target.type === 'bomb' ? '!' : target.type === 'gold' ? '$' : '+', target.x, target.y + 1);
         ctx.restore();
       }
+    }
+
+    function drawFingerTrail() {
+      ctx.save();
+      for (let i = 0; i < finger.trail.length; i++) {
+        const point = finger.trail[i];
+        ctx.globalAlpha = i / finger.trail.length * 0.45;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 8 + i * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffd166';
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     function drawFinger() {
@@ -372,17 +589,22 @@
         return;
       }
 
+      drawFingerTrail();
       ctx.save();
-      ctx.shadowColor = '#ffdd57';
-      ctx.shadowBlur = 24;
+      ctx.shadowColor = finger.pinching ? '#ff4ecd' : '#ffd166';
+      ctx.shadowBlur = 34;
       ctx.beginPath();
       ctx.arc(finger.x, finger.y, 22 + finger.burst, 0, Math.PI * 2);
-      ctx.fillStyle = finger.pinching ? 'rgba(255, 119, 119, 0.9)' : 'rgba(255, 221, 87, 0.95)';
+      ctx.fillStyle = finger.pinching ? 'rgba(255, 78, 205, 0.88)' : 'rgba(255, 209, 102, 0.94)';
       ctx.fill();
 
       ctx.shadowBlur = 0;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.stroke();
+
       ctx.beginPath();
-      ctx.arc(finger.x, finger.y, 7, 0, Math.PI * 2);
+      ctx.arc(finger.x, finger.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.restore();
@@ -393,15 +615,17 @@
         const p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
-        p.vx *= 0.95;
-        p.vy *= 0.95;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
         p.life -= 1;
 
         ctx.save();
-        ctx.globalAlpha = Math.max(p.life / 34, 0);
+        ctx.globalAlpha = Math.max(p.life / 42, 0);
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = colorFor(p.type);
+        ctx.shadowColor = colorFor(p.type);
+        ctx.shadowBlur = 14;
         ctx.fill();
         ctx.restore();
 
@@ -409,18 +633,48 @@
       }
     }
 
+    function drawFloatingTexts() {
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const t = floatingTexts[i];
+        t.y -= 1.1;
+        t.life -= 1;
+        ctx.save();
+        ctx.globalAlpha = Math.max(t.life / 48, 0);
+        ctx.font = '900 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = colorFor(t.type);
+        ctx.shadowColor = colorFor(t.type);
+        ctx.shadowBlur = 12;
+        ctx.fillText(t.text, t.x, t.y);
+        ctx.restore();
+        if (t.life <= 0) floatingTexts.splice(i, 1);
+      }
+    }
+
+    function drawFlash() {
+      if (flash <= 0.01) return;
+      ctx.save();
+      ctx.globalAlpha = flash * 0.2;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
     function gameLoop() {
       drawBackground();
       updateGame();
       drawTargets();
       drawParticles();
+      drawFloatingTexts();
       drawFinger();
+      drawFlash();
       requestAnimationFrame(gameLoop);
     }
 
     function onHandResults(results) {
       if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
         finger.visible = false;
+        finger.trail = [];
         return;
       }
 
@@ -428,19 +682,21 @@
       const indexTip = landmarks[8];
       const thumbTip = landmarks[4];
 
-      // Mirror x so it feels like looking in a mirror.
       finger.x = (1 - indexTip.x) * canvas.width;
       finger.y = indexTip.y * canvas.height;
       finger.visible = true;
+
+      finger.trail.push({ x: finger.x, y: finger.y });
+      if (finger.trail.length > 14) finger.trail.shift();
 
       const pinchDistance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
       const isPinchingNow = pinchDistance < 0.055;
 
       if (isPinchingNow && !finger.pinching) {
-        finger.burst = 48;
-        createParticles(finger.x, finger.y, 12);
+        finger.burst = 55;
+        createParticles(finger.x, finger.y, 18, 'gold');
+        addFloatingText('SHOCKWAVE!', finger.x, finger.y - 30, 'gold');
       }
-
       finger.pinching = isPinchingNow;
     }
 
@@ -452,8 +708,8 @@
       hands.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
-        minDetectionConfidence: 0.65,
-        minTrackingConfidence: 0.65
+        minDetectionConfidence: 0.68,
+        minTrackingConfidence: 0.68
       });
 
       hands.onResults(onHandResults);
@@ -474,9 +730,11 @@
       startButton.textContent = 'Starting Camera...';
       try {
         if (!camera) await setupHandTracking();
+        startButton.disabled = false;
+        startButton.textContent = 'Start Game';
         startGame();
       } catch (error) {
-        alert('Camera could not start. Make sure camera permission is allowed and run this file from localhost or GitHub Pages.');
+        alert('Camera could not start. Allow camera permission and run this from localhost or GitHub Pages.');
         console.error(error);
         startButton.disabled = false;
         startButton.textContent = 'Start Game';
@@ -484,7 +742,6 @@
     });
 
     restartButton.addEventListener('click', startGame);
-
     gameLoop();
   </script>
 </body>
